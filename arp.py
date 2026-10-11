@@ -16,11 +16,11 @@ def get_local_ip():
 def get_mac():
     mac_num = uuid.getnode()
 
-    mac_address = ':'.join(['{:02x}'.format((mac_num >> i) & 0xff) for i in range(0, 8*6, 8)][::-1])
+    mac_address = ''.join(['{:02x}'.format((mac_num >> i) & 0xff) for i in range(0, 8*6, 8)][::-1])
 
     return mac_address
 
-def arp_reply(ip, mac, target_ip, target_mac):
+def arp_reply(ip, mac, target_ip, target_mac, interface="wlan0"):
     # first the Eth header which is Dest Mac + Src Mac + 0x0806 for arp protocol
     eth = bytes.fromhex(target_mac) + bytes.fromhex(mac) + bytes.fromhex("08 06")
 
@@ -29,15 +29,31 @@ def arp_reply(ip, mac, target_ip, target_mac):
     # protocol type ipv4 0x0800
     # Hardware Length 06
     # Protocol Length 04
+    # Opcode 0002 for reply 0001 for send
     # Src Mac + Src Ip + Target Mac + Target Ip
+    ipparts = ip.split('.')
+    ip_hex = ""
+    for ippart in ipparts:
+        ip_hex += format(int(ippart), '02x')
+    
+    target_ip_parts = target_ip.split('.')
+    target_ip_hex = ""
+    for target_ip_part in target_ip_parts:
+        target_ip_hex += format(int(target_ip_part), '02x')
+    mac = mac.replace(":", "")
+    target_mac = target_mac.replace(":", "")
     arp = (
         bytes.fromhex("00 01") +
         bytes.fromhex("08 00") +
         bytes.fromhex("06 04") +
+        bytes.fromhex("00 02") +
         bytes.fromhex(mac) +
-        bytes.fromhex(ip) +
+        bytes.fromhex(ip_hex) +
         bytes.fromhex(target_mac) +
-        bytes.fromhex(target_ip)
+        bytes.fromhex(target_ip_hex)
     )
 
     s = socket.socket(socket.AF_PACKET, socket.SOCK_RAW)
+
+    s.bind((interface, 0))
+    s.sendto(eth + arp, (interface, 0))
